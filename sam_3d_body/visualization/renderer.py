@@ -39,6 +39,26 @@ class Renderer:
         else:
             mesh = trimesh.Trimesh(verts, faces=self.faces.copy(), process=False)
 
+        # Korrekte SMPL/MHR → Viewer Transformation
+        rot_x = trimesh.transformations.rotation_matrix(
+            np.pi, [1, 0, 0]
+        )
+        mesh.apply_transform(rot_x)
+        
+        # Kleine Rückwärts-Neigung (Pitch-Korrektur)
+        tilt_back = trimesh.transformations.rotation_matrix(
+            np.deg2rad(-6.0),  # -5 bis -8 ist realistisch
+            [1, 0, 0]
+        )
+        mesh.apply_transform(tilt_back)
+
+        # Zentrieren auf Boden
+        min_y = mesh.vertices[:, 1].min()
+        mesh.vertices[:, 1] -= min_y
+
+        # Zentrieren in X/Z
+        mesh.vertices[:, [0, 2]] -= mesh.vertices[:, [0, 2]].mean(axis=0)
+
         # apply vertex colors if provided
         if vertex_colors is not None:
             # vertex_colors shape (V,4) or (V,3)
