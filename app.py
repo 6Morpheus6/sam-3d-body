@@ -24,6 +24,8 @@ PREVIEW_DIR.mkdir(exist_ok=True)
 CHECKPOINT_PATH = BASE_DIR / "checkpoints" / "sam-3d-body-dinov3" / "model.ckpt"
 MHR_PATH = BASE_DIR / "checkpoints" / "sam-3d-body-dinov3" / "assets" / "mhr_model.pt"
 
+CURRENT_PREVIEW_MESH = None
+
 # =========================================================
 # HILFSFUNKTIONEN
 # =========================================================
@@ -160,19 +162,46 @@ def process_images(files):
 # =========================================================
 
 def on_mesh_selected(selected_mesh):
+    global CURRENT_PREVIEW_MESH
     if not selected_mesh:
-        return gr.update(value=1.0), None
-    return gr.update(value=1.0), selected_mesh
+        CURRENT_PREVIEW_MESH = None
+        return gr.update(value=1.0), None, "Faces: –"
+
+    mesh = trimesh.load(selected_mesh, force="mesh", process=False)
+    face_count = len(mesh.faces)
+
+    CURRENT_PREVIEW_MESH = selected_mesh
+    info = f"**Faces:** {face_count:,} (100 %)"
+    return gr.update(value=1.0), selected_mesh, info
+
 
 
 def update_decimation(selected_mesh, ratio):
+    global CURRENT_PREVIEW_MESH
     if not selected_mesh:
+        CURRENT_PREVIEW_MESH = None
         return None, "Faces: –"
 
     preview, original, target = decimate_mesh(selected_mesh, ratio)
+    CURRENT_PREVIEW_MESH = preview
 
     info = f"**Faces:** {original:,} → {target:,} ({int(ratio*100)}%)"
     return preview, info
+
+
+def export_current_mesh(export_format):
+    if not CURRENT_PREVIEW_MESH:
+        return None
+
+    src = Path(CURRENT_PREVIEW_MESH)
+    run_dir = src.parent
+
+    export_path = run_dir / f"{src.stem}_export.{export_format}"
+
+    mesh = trimesh.load(src, force="mesh", process=False)
+    mesh.export(export_path)
+
+    return str(export_path)
 
 # =========================================================
 # GRADIO UI
@@ -209,6 +238,17 @@ with gr.Blocks(title="SAM-3D-Body (Windows, Gradio 5.x)") as demo:
                 label="Mesh-Detail (Anteil der Polygone)",
             )
 
+            export_format = gr.Dropdown(
+                choices=["glb", "obj", "ply"],
+                value="glb",
+                label="Export-Format",
+            )
+
+            export_button = gr.Button("Export aktuelles Mesh")
+
+            export_file = gr.File(label="Exportierte Datei")
+
+
             mesh_output = gr.File(
                 label="Erzeugte Meshes (Download)",
                 file_count="multiple",
@@ -219,7 +259,7 @@ with gr.Blocks(title="SAM-3D-Body (Windows, Gradio 5.x)") as demo:
 
             mesh_viewer = gr.Model3D(
                 label="3D Vorschau",
-                clear_color=[0.9, 0.9, 0.9, 1.0],
+                clear_color=[0.09, 0.09, 0.11, 1.0],
                 height="85vh",
             )
 
@@ -234,13 +274,20 @@ with gr.Blocks(title="SAM-3D-Body (Windows, Gradio 5.x)") as demo:
     mesh_selector.change(
         fn=on_mesh_selected,
         inputs=mesh_selector,
-        outputs=[decimation_slider, mesh_viewer],
+        outputs=[decimation_slider, mesh_viewer, face_info],
     )
+
 
     decimation_slider.change(
         fn=update_decimation,
         inputs=[mesh_selector, decimation_slider],
         outputs=[mesh_viewer, face_info],
+    )
+
+    export_button.click(
+        fn=export_current_mesh,
+        inputs=export_format,
+        outputs=export_file,
     )
 
 
