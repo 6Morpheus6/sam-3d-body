@@ -27,7 +27,7 @@ MHR_PATH = BASE_DIR / "checkpoints" / "sam-3d-body-dinov3" / "assets" / "mhr_mod
 CURRENT_PREVIEW_MESH = None
 
 # =========================================================
-# HILFSFUNKTIONEN
+# Help Functions
 # =========================================================
 
 def resolve_input_images(files):
@@ -79,7 +79,7 @@ def decimate_mesh(mesh_path: str, ratio: float):
     mesh = trimesh.load(mesh_path, force="mesh", process=True)
 
     if not isinstance(mesh, trimesh.Trimesh):
-        raise RuntimeError("Mesh konnte nicht geladen werden")
+        raise RuntimeError("Mesh could not be loaded for decimation.")
 
     mesh.remove_unreferenced_vertices()
     mesh.merge_vertices()
@@ -97,7 +97,7 @@ def decimate_mesh(mesh_path: str, ratio: float):
         f"{original_faces} → {target_faces} faces"
     )
 
-    # 100 % → Original zurückgeben
+    # 100 % → Return original
     if target_faces >= original_faces:
         return mesh_path, original_faces, target_faces
 
@@ -107,7 +107,7 @@ def decimate_mesh(mesh_path: str, ratio: float):
             aggression=5
         )
     except Exception as e:
-        print("[ERROR] Decimation fehlgeschlagen:", e)
+        print("[ERROR] Decimation failed:", e)
         return mesh_path, original_faces, target_faces
 
     preview_path = PREVIEW_DIR / (
@@ -160,7 +160,7 @@ def process_images(files):
         value=meshes[0] if meshes else None
     )
 
-    status = f"Fertig. {len(meshes)} Mesh(es) erzeugt."
+    status = f"Done. Created {len(meshes)} Mesh(es)."
 
     mesh_output_update = gr.update(
         value=meshes,
@@ -246,7 +246,7 @@ def load_meshes_for_run(run_name: str):
     if not meshes:
         return gr.update(choices=[], value=None), None, "Faces: –"
 
-    # Faces vom ersten Mesh
+    # Faces from the first Mesh
     mesh = trimesh.load(meshes[0], force="mesh", process=False)
     face_info = f"**Faces:** {len(mesh.faces):,} (100 %)"
 
@@ -256,9 +256,9 @@ def load_meshes_for_run(run_name: str):
 # GRADIO UI
 # =========================================================
 
-with gr.Blocks(title="SAM-3D-Body (Windows, Gradio 5.x)") as demo:
+with gr.Blocks(title="SAM3D Body") as demo:
 
-    gr.Markdown("## SAM-3D-Body – 3D Mesh aus Bildern")
+    gr.Markdown("## SAM3D Body – Create 3D Meshes from Images")
 
     with gr.Row():
         with gr.Column(scale=1):
@@ -266,21 +266,21 @@ with gr.Blocks(title="SAM-3D-Body (Windows, Gradio 5.x)") as demo:
             image_input = gr.File(
                 file_types=["image"],
                 file_count="multiple",
-                label="Bilder hochladen",
+                label="Upload Images",
             )
 
-            run_button = gr.Button("Run SAM-3D-Body", variant="primary")
+            run_button = gr.Button("Run SAM3D Body", variant="primary")
 
             status_text = gr.Textbox(label="Status", interactive=False)
 
             run_selector = gr.Dropdown(
-                label="Run auswählen",
+                label="Select Previous Run",
                 choices=list_runs(OUTPUT_DIR),
                 interactive=True,
             )
 
             mesh_selector = gr.Dropdown(
-                label="Mesh auswählen (Preview)",
+                label="Select Mesh (Preview)",
                 choices=[],
                 interactive=True,
             )
@@ -290,7 +290,7 @@ with gr.Blocks(title="SAM-3D-Body (Windows, Gradio 5.x)") as demo:
                 maximum=1.0,
                 value=1.0,
                 step=0.05,
-                label="Mesh-Detail (Anteil der Polygone)",
+                label="Mesh-Detail (Amount of Polygons)",
             )
 
             export_format = gr.Dropdown(
@@ -300,20 +300,20 @@ with gr.Blocks(title="SAM-3D-Body (Windows, Gradio 5.x)") as demo:
             )
 
             mesh_output = gr.File(
-                label="Erzeugte Meshes (Download)",
+                label="Created Meshes (Download)",
                 file_count="multiple",
                 interactive=False,
                 visible=False,
             )
 
-            export_button = gr.Button("Export aktuelles Mesh")
+            export_button = gr.Button("Export current Mesh")
 
             export_file = gr.File(
-                label="Exportierte Datei",
+                label="Exported File",
                 visible=False,
             )
 
-            batch_download_btn = gr.Button("Alle Meshes als ZIP herunterladen")
+            batch_download_btn = gr.Button("Download all Meshes as ZIP")
 
             batch_zip = gr.File(
                 label="ZIP Download",
@@ -323,7 +323,7 @@ with gr.Blocks(title="SAM-3D-Body (Windows, Gradio 5.x)") as demo:
         with gr.Column(scale=1):
 
             mesh_viewer = gr.Model3D(
-                label="3D Vorschau",
+                label="3D Preview",
                 clear_color=[0.09, 0.09, 0.11, 1.0],
                 height="85vh",
             )
