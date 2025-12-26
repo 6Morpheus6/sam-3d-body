@@ -1,14 +1,13 @@
+import re
 import sys
 import shutil
+import trimesh
 import zipfile
 import tempfile
 import subprocess
-import uuid
-import re
+import gradio as gr
 from pathlib import Path
 
-import gradio as gr
-import trimesh
 
 # =========================================================
 # KONFIGURATION
@@ -64,6 +63,13 @@ def cleanup_mesh_filenames(folder: Path):
             if not new_path.exists():
                 p.rename(new_path)
 
+
+def list_runs(output_dir: Path):
+    runs = []
+    for p in sorted(output_dir.iterdir()):
+        if p.is_dir() and p.name.startswith("run_"):
+            runs.append(p.name)
+    return runs
 
 # =========================================================
 # DECIMATION (PREVIEW)
@@ -161,7 +167,13 @@ def process_images(files):
         visible=bool(meshes)
     )
 
-    return mesh_output_update, dropdown_update, status
+    run_update = gr.update(
+        choices=list_runs(OUTPUT_DIR),
+        value=f"run_{run_id}",
+    )
+
+
+    return mesh_output_update, dropdown_update, status, run_update
 
 # =========================================================
 # UI CALLBACKS
@@ -220,6 +232,26 @@ def download_all_meshes(mesh_files):
 
     return gr.update(value=str(zip_path), visible=True)
 
+
+def load_meshes_for_run(run_name: str):
+    run_dir = OUTPUT_DIR / run_name
+    if not run_dir.exists():
+        return gr.update(choices=[], value=None), None, "Faces: –"
+
+    meshes = sorted(
+        str(p) for p in run_dir.iterdir()
+        if p.suffix.lower() in [".glb", ".obj", ".ply"]
+    )
+
+    if not meshes:
+        return gr.update(choices=[], value=None), None, "Faces: –"
+
+    # Faces vom ersten Mesh
+    mesh = trimesh.load(meshes[0], force="mesh", process=False)
+    face_info = f"**Faces:** {len(mesh.faces):,} (100 %)"
+
+    return gr.update(choices=meshes, value=meshes[0]), meshes[0], face_info
+
 # =========================================================
 # GRADIO UI
 # =========================================================
@@ -240,6 +272,12 @@ with gr.Blocks(title="SAM-3D-Body (Windows, Gradio 5.x)") as demo:
             run_button = gr.Button("Run SAM-3D-Body", variant="primary")
 
             status_text = gr.Textbox(label="Status", interactive=False)
+
+            run_selector = gr.Dropdown(
+                label="Run auswählen",
+                choices=list_runs(OUTPUT_DIR),
+                interactive=True,
+            )
 
             mesh_selector = gr.Dropdown(
                 label="Mesh auswählen (Preview)",
@@ -295,7 +333,13 @@ with gr.Blocks(title="SAM-3D-Body (Windows, Gradio 5.x)") as demo:
     run_button.click(
         fn=process_images,
         inputs=image_input,
-        outputs=[mesh_output, mesh_selector, status_text]
+        outputs=[mesh_output, mesh_selector, status_text, run_selector],
+    )
+
+    run_selector.change(
+        fn=load_meshes_for_run,
+        inputs=run_selector,
+        outputs=[mesh_selector, mesh_viewer, face_info],
     )
 
     batch_download_btn.click(
