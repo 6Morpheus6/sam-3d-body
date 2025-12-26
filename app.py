@@ -1,5 +1,6 @@
 import sys
 import shutil
+import zipfile
 import tempfile
 import subprocess
 import uuid
@@ -155,7 +156,12 @@ def process_images(files):
 
     status = f"Fertig. {len(meshes)} Mesh(es) erzeugt."
 
-    return meshes, dropdown_update, status
+    mesh_output_update = gr.update(
+        value=meshes,
+        visible=bool(meshes)
+    )
+
+    return mesh_output_update, dropdown_update, status
 
 # =========================================================
 # UI CALLBACKS
@@ -191,17 +197,28 @@ def update_decimation(selected_mesh, ratio):
 
 def export_current_mesh(export_format):
     if not CURRENT_PREVIEW_MESH:
-        return None
+        return gr.update(visible=False)
 
     src = Path(CURRENT_PREVIEW_MESH)
-    run_dir = src.parent
-
-    export_path = run_dir / f"{src.stem}_export.{export_format}"
+    export_path = src.with_suffix(f".{export_format}")
 
     mesh = trimesh.load(src, force="mesh", process=False)
     mesh.export(export_path)
 
-    return str(export_path)
+    return gr.update(value=str(export_path), visible=True)
+
+def download_all_meshes(mesh_files):
+    if not mesh_files:
+        return gr.update(visible=False)
+
+    zip_path = OUTPUT_DIR / "sam3d_meshes.zip"
+
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+        for f in mesh_files:
+            f = Path(f)
+            z.write(f, arcname=f.name)
+
+    return gr.update(value=str(zip_path), visible=True)
 
 # =========================================================
 # GRADIO UI
@@ -244,15 +261,25 @@ with gr.Blocks(title="SAM-3D-Body (Windows, Gradio 5.x)") as demo:
                 label="Export-Format",
             )
 
-            export_button = gr.Button("Export aktuelles Mesh")
-
-            export_file = gr.File(label="Exportierte Datei")
-
-
             mesh_output = gr.File(
                 label="Erzeugte Meshes (Download)",
                 file_count="multiple",
                 interactive=False,
+                visible=False,
+            )
+
+            export_button = gr.Button("Export aktuelles Mesh")
+
+            export_file = gr.File(
+                label="Exportierte Datei",
+                visible=False,
+            )
+
+            batch_download_btn = gr.Button("Alle Meshes als ZIP herunterladen")
+
+            batch_zip = gr.File(
+                label="ZIP Download",
+                visible=False,
             )
 
         with gr.Column(scale=1):
@@ -268,7 +295,13 @@ with gr.Blocks(title="SAM-3D-Body (Windows, Gradio 5.x)") as demo:
     run_button.click(
         fn=process_images,
         inputs=image_input,
-        outputs=[mesh_output, mesh_selector, status_text],
+        outputs=[mesh_output, mesh_selector, status_text]
+    )
+
+    batch_download_btn.click(
+        fn=download_all_meshes,
+        inputs=mesh_output,
+        outputs=batch_zip,
     )
 
     mesh_selector.change(
@@ -276,7 +309,6 @@ with gr.Blocks(title="SAM-3D-Body (Windows, Gradio 5.x)") as demo:
         inputs=mesh_selector,
         outputs=[decimation_slider, mesh_viewer, face_info],
     )
-
 
     decimation_slider.change(
         fn=update_decimation,
@@ -289,7 +321,6 @@ with gr.Blocks(title="SAM-3D-Body (Windows, Gradio 5.x)") as demo:
         inputs=export_format,
         outputs=export_file,
     )
-
 
 # =========================================================
 # START
